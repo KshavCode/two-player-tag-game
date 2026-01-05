@@ -39,10 +39,10 @@ resetimg = pygame.transform.scale(pygame.image.load("images/reset.png") , (pcspe
 menuimg = pygame.transform.scale(pygame.image.load("images/menu.png") , (pcspecs[0]/2,pcspecs[1]/30)).convert_alpha()
 arrowimg = pygame.transform.scale(pygame.image.load("images/arrow.png"), (35, 35)).convert_alpha()
 
-# PLATFORMS
-platformlong = pygame.transform.scale(pygame.image.load("images/g1.png"), (700, 80)).convert_alpha()
-platformmedium = pygame.transform.scale(pygame.image.load("images/g2.png"), (350, 80)).convert_alpha()
-platformshort = pygame.transform.scale(pygame.image.load("images/g3.png"), (175, 80)).convert_alpha()
+# PLATFORMS (drawn as rectangles instead of image sprites)
+# Color for platform fill and optional border
+platform_color = (120, 72, 18)  # brown-ish
+platform_border = (30, 20, 10)
 
 # CHARACTERS
 char1_img = pygame.transform.scale(pygame.image.load(f"images/skins/{character_index_1}.png"), (40, 40)).convert_alpha()
@@ -74,7 +74,7 @@ def loadscreen() :
     rightarrow2 = pygame.transform.scale(pygame.image.load("images/right2.png"), (35,35)).convert_alpha() 
     pygame.mixer.music.load("music/game sound3.mp3")
     global default_volume
-    pygame.mixer.music.play()
+    pygame.mixer.music.play(loops=10)
     while not exit_game : 
         win.blit(menu_bg, (0,0))
         win.blit(char2_img, (pcspecs[0]//2-150, pcspecs[1]//2-100))
@@ -107,6 +107,9 @@ def loadscreen() :
                 if volumebutton_rect.collidepoint(mloc):
                     default_volume = not default_volume
                 elif playbutton_rect.collidepoint(mloc): 
+                    if default_volume :
+                        pygame.mixer.music.load("music/ingame music3.mp3")
+                        pygame.mixer.music.play(loops=10)
                     gameloop()
                 if leftbutton1_rect.collidepoint(mloc) :
                     character_index_1 -= 1
@@ -146,204 +149,196 @@ def loadscreen() :
 
 
 def gameloop() : 
+    # Improved physics implementation
     global char1_img, char2_img
     turn = random.randint(0, 1)
     clock = pygame.time.Clock()
-    counter, countdown = 30, '30'
+    counter = 30
+    countdown = str(counter)
     pygame.time.set_timer(pygame.USEREVENT, 1000)
-    jump1 = False
-    jump2 = False
-    jumpHeight = 40
-    velocity1 = jumpHeight
-    velocity2 = jumpHeight
-    gravity = 7
+
+    # Physics constants (tweak these to taste)
+    GRAVITY = 1.2
+    JUMP_VELOCITY = -20
+    MOVE_SPEED = 7
+
     platformlist = [
-        (pcspecs[0] // 4, 75, 700, 80),
-        (pcspecs[0] // 2, 175, 350, 80),
-        (pcspecs[0] // 5, 300, 350, 80),
-        (pcspecs[0] // 2 + 100, 300, 350, 80),
-        (pcspecs[0] // 7, 450, 175, 80),
-        (pcspecs[0] // 2, 450, 175, 80),
-        (pcspecs[0] // 4, 550, 350, 80),
-        (pcspecs[0] // 2 + 200, 550, 175, 80)
+        (pcspecs[0] // 4, 75, 700, 30),
+        (pcspecs[0] // 2, 175, 350, 30),
+        (pcspecs[0] // 5, 300, 350, 30),
+        (pcspecs[0] // 2 + 100, 300, 350, 30),
+        (pcspecs[0] // 7, 450, 175, 30),
+        (pcspecs[0] // 2, 450, 175, 30),
+        (pcspecs[0] // 4, 620, 350, 30),
+        (pcspecs[0] // 2 + 200, 600, 175, 30)
     ]
+
     ingame_bg = pygame.transform.scale(pygame.image.load("images/image.jpg"), (pcspecs[0], pcspecs[1])).convert_alpha()
-    char1_pos_x, char1_pos_y = 10, 700
-    char2_pos_x, char2_pos_y = 500, 700
-    char1_speed = 0 
-    char2_speed = 0 
-    exit_game = False 
-    game_over = False 
-    char1_pos_list = []
-    char2_pos_list = []
+
+    # Positions and velocities
+    char1_x, char1_y = 10.0, 700.0
+    char2_x, char2_y = 500.0, 700.0
+    char1_vx, char1_vy = 0.0, 0.0
+    char2_vx, char2_vy = 0.0, 0.0
+    in_air1, in_air2 = False, False
+
+    exit_game = False
+    game_over = False
     last = pygame.time.get_ticks()
 
-    global default_volume, in_air1, in_air2
-    if default_volume :
-        pygame.mixer.music.load("music/ingame music3.mp3")
-        pygame.mixer.music.play()
-    
-    while not exit_game :
-        if game_over : 
-            if turn == 0 :
+    # helper to get rects
+    def player_rect(x, y, img):
+        return pygame.Rect(int(x), int(y), img.get_width(), img.get_height())
+
+    # main loop
+    while not exit_game:
+        if game_over:
+            if turn == 0:
                 winimg = pygame.image.load("images/winner1.png")
-            else : 
+            else:
                 winimg = pygame.image.load("images/winner2.png")
 
             winimg = pygame.transform.scale(winimg, (400, 50))
 
-            win.blit(gameoverimg, (360,120))
-            win.blit(blimg, (0,0))
-            win.blit(winimg, (pcspecs[0]/4, pcspecs[1]/3))
-            win.blit(resetimg, (pcspecs[0]/4, 1.5*pcspecs[1]/3))
-            win.blit(menuimg, ((pcspecs[0]/4, 1.8*pcspecs[1]/3)))
-            
-            for event in pygame.event.get() : 
-                if event.type == pygame.QUIT : 
-                    exit_game = True
-                
-                if event.type == pygame.KEYDOWN : 
-                    if event.key == pygame.K_RETURN : 
-                        gameloop()
-                        
-                    if event.key == pygame.K_ESCAPE : 
-                        loadscreen()
-        else : 
+            win.blit(gameoverimg, (360, 120))
+            win.blit(blimg, (0, 0))
+            win.blit(winimg, (pcspecs[0] / 4, pcspecs[1] / 3))
+            win.blit(resetimg, (pcspecs[0] / 4, 1.5 * pcspecs[1] / 3))
+            win.blit(menuimg, ((pcspecs[0] / 4, 1.8 * pcspecs[1] / 3)))
+
             for event in pygame.event.get():
-                if event.type == pygame.USEREVENT: 
+                if event.type == pygame.QUIT:
+                    exit_game = True
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        gameloop()
+                    if event.key == pygame.K_ESCAPE:
+                        loadscreen()
+
+        else:
+            for event in pygame.event.get():
+                if event.type == pygame.USEREVENT:
                     counter -= 1
-                    if counter > 0 :
-                        countdown = str(counter)
-                    else :
+                    countdown = str(counter) if counter > 0 else '0'
+                    if counter <= 0:
                         game_over = True
 
                 if event.type == pygame.QUIT:
                     exit_game = True
+
+                # KEYDOWN -> start movement or jump
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         loadscreen()
 
-                if event.type == pygame.KEYDOWN:
-                    if turn == 1 :
-                        speed = 3
-                    else :
-                        speed = 0
+                    # Player 2 (WASD)
                     if event.key == pygame.K_d:
-                        char2_speed = 10 + speed
+                        speed = 3 if turn == 1 else 0
+                        char2_vx = MOVE_SPEED + speed
                     elif event.key == pygame.K_a:
-                        char2_speed = -10 - speed
+                        speed = 3 if turn == 1 else 0
+                        char2_vx = - (MOVE_SPEED + speed)
                     elif event.key == pygame.K_w:
-                        if not jump2 :
-                            jump2 = True
+                        if not in_air2:
+                            char2_vy = JUMP_VELOCITY
+                            in_air2 = True
 
-                if event.type == pygame.KEYDOWN:
-                    if turn == 0 :
-                        speed = 3
-                    else :
-                        speed = 0
+                    # Player 1 (arrow keys)
                     if event.key == pygame.K_RIGHT:
-                        char1_speed = 10+speed
+                        speed = 3 if turn == 0 else 0
+                        char1_vx = MOVE_SPEED + speed
                     elif event.key == pygame.K_LEFT:
-                        char1_speed = -10-speed
+                        speed = 3 if turn == 0 else 0
+                        char1_vx = - (MOVE_SPEED + speed)
                     elif event.key == pygame.K_UP:
-                        if not jump1 :
-                            jump1 = True
-                        
-            char1_pos_x = char1_pos_x + char1_speed
-            char2_pos_x = char2_pos_x + char2_speed
-            if jump1 : 
-                char1_pos_y -= velocity1
-                velocity1 -= gravity
-                if velocity1 < -jumpHeight :
-                    jump1 = False
-                    velocity1 = jumpHeight
-            else :
-                if char1_pos_y < 700 :
-                    char1_pos_y += gravity
+                        if not in_air1:
+                            char1_vy = JUMP_VELOCITY
+                            in_air1 = True
 
-            if jump2 : 
-                char2_pos_y -= velocity2
-                velocity2 -= gravity
-                if velocity2 < -jumpHeight :
-                    jump2 = False
-                    velocity2 = jumpHeight
+                # KEYUP -> stop horizontal movement when keys released
+                if event.type == pygame.KEYUP:
+                    if event.key in (pygame.K_d, pygame.K_a):
+                        char2_vx = 0
+                    if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                        char1_vx = 0
 
-            else : 
-                if char2_pos_y < 700 :
-                    char2_pos_y += gravity
+            # Apply horizontal velocities
+            char1_x += char1_vx
+            char2_x += char2_vx
 
-            def check_collision(player_x, player_y, platforms):
-                for platform in platforms:
-                    px, py, pw, ph = platform
-                    if player_x + 10 > px and player_x < px + pw-10 and player_y + 10 > py and player_y < py + ph:
-                        return platform
-                return None
+            # Apply gravity and vertical movement
+            char1_vy += GRAVITY
+            char1_y += char1_vy
 
-            def handle_platform_collision(player_x, player_y, velocity, platforms):
-                platform = check_collision(player_x, player_y, platforms)
-                if platform:
-                    _, py, _, _ = platform
-                    if velocity < 0:
-                        return player_y, False, velocity
-                    else: 
-                        return py - 10, False, jumpHeight
-                return player_y, True, velocity
+            char2_vy += GRAVITY
+            char2_y += char2_vy
 
-            char1_pos_y, in_air1, velocity1 = handle_platform_collision(char1_pos_x, char1_pos_y, velocity1, platformlist)
-            char2_pos_y, in_air2, velocity2 = handle_platform_collision(char2_pos_x, char2_pos_y, velocity2, platformlist)
+            # Ground collision
+            GROUND_Y = 700
+            if char1_y >= GROUND_Y:
+                char1_y = GROUND_Y
+                char1_vy = 0
+                in_air1 = False
+            if char2_y >= GROUND_Y:
+                char2_y = GROUND_Y
+                char2_vy = 0
+                in_air2 = False
 
-            win.blit(ingame_bg, (0,0))
-            tex(countdown, (0, 0, 0), pcspecs[0]//2-50, 10)
+            # Platform collisions (only when falling)
+            def resolve_platform_collision(x, y, vy, img):
+                rect = player_rect(x, y, img)
+                # previous bottom to avoid tunnelling check could be improved; this is a simple check
+                for px, py, pw, ph in platformlist:
+                    plat_rect = pygame.Rect(px, py, pw, ph)
+                    # check if player is overlapping horizontally
+                    if rect.right > plat_rect.left + 5 and rect.left < plat_rect.right - 5:
+                        # only handle collision when coming from above (falling)
+                        if vy >= 0 and rect.bottom >= plat_rect.top and rect.bottom <= plat_rect.top + ph:
+                            # snap to platform top
+                            new_y = plat_rect.top - img.get_height()
+                            return new_y, 0.0, False
+                return y, vy, True if vy != 0 else False
 
+            char1_y, char1_vy, in_air1 = resolve_platform_collision(char1_x, char1_y, char1_vy, char1_img)
+            char2_y, char2_vy, in_air2 = resolve_platform_collision(char2_x, char2_y, char2_vy, char2_img)
 
-            if len(char1_pos_list) != 0 :
-                del char1_pos_list[0]
-                del char1_pos_list[0]
-            char1_pos_list.append(char1_pos_x)
-            char1_pos_list.append(char1_pos_y)
+            # Wrap-around horizontally
+            if char1_x < 0:
+                char1_x = pcspecs[0]
+            elif char1_x > pcspecs[0]:
+                char1_x = 0
+            if char2_x < 0:
+                char2_x = pcspecs[0]
+            elif char2_x > pcspecs[0]:
+                char2_x = 0
 
-            if len(char2_pos_list) != 0 :
-                del char2_pos_list[0]
-                del char2_pos_list[0]
-            char2_pos_list.append(char2_pos_x)
-            char2_pos_list.append(char2_pos_y)
-
-            if char1_pos_x < 0:
-                char1_pos_x = pcspecs[0]
-            elif char1_pos_x > pcspecs[0]:
-                char1_pos_x = 0
-
-            if char2_pos_x < 0:
-                char2_pos_x = pcspecs[0]
-            elif char2_pos_x > pcspecs[0]:
-                char2_pos_x = 0
-
-            if turn == 0 and abs(char1_pos_list[0]-char2_pos_list[0])<30 and abs(char1_pos_list[1]-char2_pos_list[1])<40:
+            # Tagging: when close, and enough time has passed, swap turn and reset timer
+            dist_x = abs(char1_x - char2_x)
+            dist_y = abs(char1_y - char2_y)
+            if dist_x < 40 and dist_y < 50:
                 now = pygame.time.get_ticks()
-                if now - last >= 2000 :
-                    turn = 1
-                
-                
-            elif turn == 1 and abs(char1_pos_list[0]-char2_pos_list[0])<30 and abs(char1_pos_list[1]-char2_pos_list[1])<40 :
-                now = pygame.time.get_ticks()
-                if now - last >= 2000 :
-                    turn = 0
-                
+                if now - last >= 2000:
+                    # swap who is "it"
+                    turn = 1 - turn
+                    last = now
+
+            # Draw everything
+            win.blit(ingame_bg, (0, 0))
+            tex(countdown, (0, 0, 0), pcspecs[0] // 2 - 50, 10)
+
             for platform in platformlist:
                 px, py, pw, ph = platform
-                if pw == 700:
-                    win.blit(platformlong, (px, py))
-                elif pw == 350:
-                    win.blit(platformmedium, (px, py))
-                elif pw == 175:
-                    win.blit(platformshort, (px, py))
-            win.blit(char1_img, tuple(char1_pos_list))
-            win.blit(char2_img, tuple(char2_pos_list))
-            if turn == 0 :
-                win.blit(arrowimg, (char1_pos_list[0], char1_pos_list[1]-50))
+                # Draw filled rectangle for each platform and a subtle border
+                pygame.draw.rect(win, platform_color, (px, py, pw, ph))
+                pygame.draw.rect(win, platform_border, (px, py, pw, ph), 2)
 
-            elif turn == 1 :
-                win.blit(arrowimg, (char2_pos_list[0], char2_pos_list[1]-50))
+            win.blit(char1_img, (int(char1_x), int(char1_y)))
+            win.blit(char2_img, (int(char2_x), int(char2_y)))
+
+            if turn == 0:
+                win.blit(arrowimg, (int(char1_x), int(char1_y) - 50))
+            else:
+                win.blit(arrowimg, (int(char2_x), int(char2_y) - 50))
 
         pygame.display.update()
         clock.tick(60)
